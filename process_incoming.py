@@ -88,6 +88,7 @@ def create_embedding(text_list, batch_size=32):    # Create embeddings with batc
 
 
 def inference(prompt):
+    print(f"Let's wait for the Response \nThinking... ")
     r = requests.post("http://localhost:11434/api/generate", json={
         "model": "llama3.2", 
         "prompt": prompt,
@@ -95,7 +96,7 @@ def inference(prompt):
     })
 
     response = r.json()
-    print(response)
+
     return response
 
 
@@ -115,13 +116,40 @@ new_df = df.loc[max_indx]
 # print(new_df[["title","number","text"]])
 
 
-prompt = f''' This is a web development course. Here are the video subtitles chunks containing video title, video number, start time in seconds, end time in seconds,and the text at that time :-
+prompt = f"""
+You are an AI teaching assistant for a Web Development course.
 
+Below are subtitle chunks from the course videos. Each chunk contains:
+- Video title
+- Video number
+- Start time (in seconds)
+- End time (in seconds)
+- The spoken content during that time
+
+Course Content:
 {new_df[["title","number","start","end","text"]].to_json(orient="records")}
 
-
+User Question:
 "{incoming_query}"
-The user asked this query related to the video,Now you have to answer just like a human do (don't mention the above format, its just for you) where and how much content is taught in which video (in which video and at which timestamp) and also guide the user to go to that particular video.If user asks unrelated queries, then tell the user to ask only the course related queries '''
+
+Instructions for your response:
+
+1. Answer like a professional human instructor guiding a student.
+2. Do NOT mention the data format or that subtitles were provided.
+3. Start your response with a short, friendly introduction related to the Web Development course.
+4. Clearly explain **where (which video)** and **how much (which timestamps)** the topic is taught.
+5. Present the information in a **point-wise format** for easy readability.
+6. For each relevant point, include:
+   - Video title
+   - Video number
+   - Timestamp range (start time  -  end time)
+   - A brief explanation of what is taught in that segment
+7. Encourage the user to visit the specific video and timestamp to understand the concept better.
+8. If the question is **not related to this course**, politely inform the user that you can only answer questions related to the Web Development course.
+
+
+Output should be well-structured and learner-friendly.
+"""
 
 
 with open("prompt.txt","w") as f:
@@ -133,7 +161,4 @@ print(response)
 
 with open("response.txt","w") as f:
     f.write(response)
-
-# for index, item in new_df.iterrows():
-#     print(index,"-->","Video No:",item["number"] ," Title:-",item["title"] ," Info:-",item["text"]," Starting:",item["start"]," Ending:",item["end"])
 

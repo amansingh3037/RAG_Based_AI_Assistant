@@ -90,12 +90,12 @@ def create_embedding(text_list, batch_size=32):    # Create embeddings with batc
     return all_embeddings
 
 
-jsons = os.listdir("jsons")               # Main logic 
+jsons = os.listdir("newjsons")               # Main logic 
 my_dicts = []
 chunk_id = 0
 
 for json_file in jsons:
-    with open(f"jsons/{json_file}", "r", encoding="utf-8") as f:
+    with open(f"newjsons/{json_file}", "r", encoding="utf-8") as f:
         content = json.load(f)
     print(f"Creating Embeddings for {json_file}")
 
@@ -107,7 +107,7 @@ for json_file in jsons:
         chunk["embedding"] = embeddings[i]
         chunk_id += 1
         my_dicts.append(chunk)   
-# print(my_dicts)
+
 
 df = pd.DataFrame.from_records(my_dicts)
 # Save this DataFrame
