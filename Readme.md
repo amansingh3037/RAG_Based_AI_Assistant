@@ -16,3 +16,13 @@ Read the joblib file and load it into the memory. Then create a relevent prompt 
 
 ## Step-6 --> Access the information
 After feeding the query to LLM , finally access or gather the result from it.
+
+## Here are some sample images of Project -->
+
+The Project Interface
+
+![image alt](https://github.com/amansingh3037/RAG_Based_AI_Assistant/blob/master/RAG%20Image%201.png?raw=true)
+
+After Query Execution 
+
+![image alt](https://github.com/amansingh3037/RAG_Based_AI_Assistant/blob/master/RAG%20Image%202.png?raw=true)
