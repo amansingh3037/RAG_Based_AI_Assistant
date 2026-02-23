@@ -1,11 +1,18 @@
+
+from flask import Flask, render_template, request, jsonify
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
 import requests
 import numpy as np
 import joblib
 
+app = Flask(__name__)
 
-def normalize_embeddings(data):                # Normalize API response
+# -------------------------------
+# EMBEDDING UTILITIES
+# -------------------------------
+
+def normalize_embeddings(data):
     if isinstance(data, dict) and "embeddings" in data:
         return data["embeddings"]
 
@@ -19,7 +26,7 @@ def normalize_embeddings(data):                # Normalize API response
     return None
 
 
-def get_embedding_dim():            # Get embedding dimension once
+def get_embedding_dim():
     r = requests.post(
         "http://localhost:11434/api/embed",
         json={"model": "bge-m3", "input": ["test"]}
@@ -31,7 +38,7 @@ def get_embedding_dim():            # Get embedding dimension once
 EMBED_DIM = get_embedding_dim()
 
 
-def embed_single_text(text):      # Embed a single text safely
+def embed_single_text(text):
     r = requests.post(
         "http://localhost:11434/api/embed",
         json={"model": "bge-m3", "input": [text]}
@@ -44,7 +51,8 @@ def embed_single_text(text):      # Embed a single text safely
 
     return None
 
-def create_embedding(text_list, batch_size=32):    # Create embeddings with batching
+
+def create_embedding(text_list, batch_size=32):
     all_embeddings = []
 
     for i in range(0, len(text_list), batch_size):
@@ -57,11 +65,8 @@ def create_embedding(text_list, batch_size=32):    # Create embeddings with batc
         data = r.json()
         embeddings = normalize_embeddings(data)
 
-        # If batch fails or NaN happens
         if embeddings is None or len(embeddings) != len(batch):
-            print(" Batch issue, retrying smaller batches")
-
-            small_size = 8  # safe small batch
+            small_size = 8
 
             for j in range(0, len(batch), small_size):
                 small_batch = batch[j:j + small_size]
@@ -76,11 +81,9 @@ def create_embedding(text_list, batch_size=32):    # Create embeddings with batc
                 if small_embeddings and len(small_embeddings) == len(small_batch):
                     all_embeddings.extend(small_embeddings)
                 else:
-                    # last fallback: single text
                     for text in small_batch:
                         vec = embed_single_text(text)
                         all_embeddings.append(vec if vec else [0.0] * EMBED_DIM)
-
         else:
             all_embeddings.extend(embeddings)
 
@@ -88,77 +91,95 @@ def create_embedding(text_list, batch_size=32):    # Create embeddings with batc
 
 
 def inference(prompt):
-    print(f"Let's wait for the Response \nThinking... ")
-    r = requests.post("http://localhost:11434/api/generate", json={
-        "model": "llama3.2", 
-        "prompt": prompt,
-        "stream": False
-    })
+
+    r = requests.post(
+        "http://localhost:11434/api/generate",
+        json={
+            "model": "llama3.2",
+            "prompt": prompt,
+            "stream": False
+        }
+    )
 
     response = r.json()
+    return response["response"]
+
+
+# -------------------------------
+# LOAD PRECOMPUTED EMBEDDINGS
+# -------------------------------
+
+df = joblib.load("embeddings.joblib")
+
+
+# -------------------------------
+# RAG PIPELINE FUNCTION
+# -------------------------------
+
+def rag_pipeline(incoming_query):
+
+    question_embedding = create_embedding([incoming_query])[0]
+
+    similarities = cosine_similarity(
+        np.vstack(df["embedding"]),
+        [question_embedding]
+    ).flatten()
+
+    top_result = 5
+    max_indx = similarities.argsort()[::-1][0:top_result]
+
+    new_df = df.loc[max_indx]
+
+    prompt = f"""
+    You are an AI teaching assistant for a Web Development course.
+
+    Course Content:
+    {new_df[["title","number","start","end","text"]].to_json(orient="records")}
+
+    User Question:
+    "{incoming_query}"
+
+    Instructions:
+    1. Answer like a professional instructor.
+    2. Do not mention subtitles.
+    3. Clearly explain video number and timestamps.
+    4. Use point-wise format.
+    5. If unrelated, politely decline.
+    6. Explain the query in 1-2 lines for better understanding.
+    """
+
+    response = inference(prompt)
 
     return response
 
 
-df = joblib.load("embeddings.joblib")
+# -------------------------------
+# FLASK ROUTES
+# -------------------------------
 
-incoming_query = input("Ask a Question:- ")
-question_embedding = create_embedding([incoming_query])[0]
-# print(question_embedding)
-
-# find similarities of questions embeddings with other embeddings!!
-similarities = cosine_similarity(np.vstack(df["embedding"]), [question_embedding]).flatten()
-# print(similarities)
-top_result = 5
-max_indx = similarities.argsort()[::-1][0:top_result]
-# print(max_indx)
-new_df = df.loc[max_indx]
-# print(new_df[["title","number","text"]])
+@app.route('/')
+def home():
+    return render_template('index.html')
 
 
-prompt = f"""
-You are an AI teaching assistant for a Web Development course.
+@app.route('/generate', methods=['POST'])
+def generate():
+    data = request.get_json()
+    user_query = data.get("query")
 
-Below are subtitle chunks from the course videos. Each chunk contains:
-- Video title
-- Video number
-- Start time (in seconds)
-- End time (in seconds)
-- The spoken content during that time
+    if not user_query:
+        return jsonify({"response": "Please enter a valid question."})
 
-Course Content:
-{new_df[["title","number","start","end","text"]].to_json(orient="records")}
-
-User Question:
-"{incoming_query}"
-
-Instructions for your response:
-
-1. Answer like a professional human instructor guiding a student.
-2. Do NOT mention the data format or that subtitles were provided.
-3. Start your response with a short, friendly introduction related to the Web Development course.
-4. Clearly explain **where (which video)** and **how much (which timestamps)** the topic is taught.
-5. Present the information in a **point-wise format** for easy readability.
-6. For each relevant point, include:
-   - Video title
-   - Video number
-   - Timestamp range (start time  -  end time)
-   - A brief explanation of what is taught in that segment
-7. Encourage the user to visit the specific video and timestamp to understand the concept better.
-8. If the question is **not related to this course**, politely inform the user that you can only answer questions related to the Web Development course.
+    try:
+        response = rag_pipeline(user_query)
+        return jsonify({"response": response})
+    except Exception as e:
+        return jsonify({"response": f"Error: {str(e)}"})
 
 
-Output should be well-structured and learner-friendly.
-"""
+# -------------------------------
+# RUN APP
+# -------------------------------
 
-
-with open("prompt.txt","w") as f:
-    f.write(prompt)
-
-
-response = inference(prompt)["response"]
-print(response)
-
-with open("response.txt","w") as f:
-    f.write(response)
-
+if __name__ == "__main__":
+    app.run(debug=True)

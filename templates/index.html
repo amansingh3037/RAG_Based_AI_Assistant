@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>RAG AI Assistant</title>
+    <link rel="stylesheet" href="{{url_for('static', filename='style.css')}}">
+</head>
+<body>
+
+    <div class="container">
+        <h1>RAG AI-Assistant</h1>
+
+        <div class="glass-card">
+
+            <!-- Left Panel (Smaller - Input) -->
+            <div class="input-section">
+                <h3>Ask a Question </h3>
+                <textarea id="userInput" placeholder="Type your query here..."></textarea>
+                <button onclick="generateResponse()">Generate</button>
+            </div>
+
+            <!-- Right Panel (Larger - Output) -->
+            <div class="output-section">
+                <h3>Response</h3>
+                <textarea id="outputBox" placeholder="Response will appear here..." readonly></textarea>
+            </div>
+
+        </div>
+    </div>
+
+<script src="{{url_for('static', filename='script.js')}}"></script>
+</body>
+</html>
